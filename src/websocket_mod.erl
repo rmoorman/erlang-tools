@@ -6,7 +6,7 @@
 -module(websocket_mod).
 
 
--export([out/1]).
+-export([out/1, send_event/1, send_event/2]).
 -export([behaviour_info/1]).
 
 
@@ -17,9 +17,17 @@
 
 
 behaviour_info(callbacks) ->
-    [{init, 1}, {handle_data, 1}, {handle_event, 1}, {shutdown, 0}];
+    [{init, 1}, {handle_data, 2}, {handle_event, 2}, {shutdown, 1}];
 behaviour_info(_Other) ->
     undefined.
+
+
+send_event(Event) ->
+    send_event(self(), Event).
+
+send_event(WsProcess, Event) ->
+    WsProcess ! {ws_event, Event}.
+
 
 out(A) -> 
     case get_upgrade_header(A#arg.headers) of 
@@ -52,36 +60,36 @@ init_handler(HandlerModule, HttpArgs) ->
     receive
 	{ok, WebSocket} ->
 	    yaws_api:websocket_setopts(WebSocket, [{active, true}]),
-	    apply({HandlerModule, init}, [HttpArgs]),
-	    event_loop(HandlerModule, WebSocket);
+	    State = apply({HandlerModule, init}, [HttpArgs]),
+	    event_loop(HandlerModule, WebSocket, State);
 	_ -> 
-	    apply({HandlerModule, shutdown}, []),
+	    apply({HandlerModule, shutdown}, [[]]),
 	    ok
     end.
 
-event_loop(HandlerModule, WebSocket) ->
+event_loop(HandlerModule, WebSocket, State) ->
     receive
 	{tcp, WebSocket, DataFrame} ->
 	    Data = yaws_api:websocket_unframe_data(DataFrame),
-	    apply({HandlerModule, handle_data}, [Data]),
-            event_loop(HandlerModule, WebSocket);
+	    NewState = apply({HandlerModule, handle_data}, [Data, State]),
+            event_loop(HandlerModule, WebSocket, NewState);
 	{tcp_closed, WebSocket} ->
-	    apply({HandlerModule, shutdown}, []),
+	    apply({HandlerModule, shutdown}, [State]),
 	    bye;
-	Event ->
-	    case apply({HandlerModule, handle_event}, [Event]) of
-		{json, JsonObject} ->
+	{ws_event, Event} ->
+	    case apply({HandlerModule, handle_event}, [Event, State]) of
+		{json, JsonObject, NewState} ->
 		    Data = list_to_binary(json:encode(JsonObject)),
 		    yaws_api:websocket_send(WebSocket, Data),
-		    event_loop(HandlerModule, WebSocket);
-		{raw, Data} when is_binary(Data) ->
+		    event_loop(HandlerModule, WebSocket, NewState);
+		{raw, Data, NewState} when is_binary(Data) ->
 		    yaws_api:websocket_send(WebSocket, Data),
-		    event_loop(HandlerModule, WebSocket);
+		    event_loop(HandlerModule, WebSocket, NewState);
 		ignore ->
-		    event_loop(HandlerModule, WebSocket);
+		    event_loop(HandlerModule, WebSocket, State);
 		Result ->
 		    error_logger:warning_msg("Unhandled result in websocket handler: ~p", [Result]),
-		    event_loop(HandlerModule, WebSocket)
+		    event_loop(HandlerModule, WebSocket, State)
 	    end
     end.
 
