@@ -1,0 +1,49 @@
+<html>
+  <head>
+    <title>Websocket handler test</title>
+    <style type="text/css">
+      #input, #output {
+      font-family: verdana;
+      font-size: 11pt;
+      padding: 0px;
+      margin: 0px; 
+      width: 350px; 
+      border: 1px solid;
+      }
+
+      button {
+      font-family: verdana;
+      font-size: 11pt;
+      padding: 0px;
+      margin: 0px; 
+      border: 2px solid;
+      }
+    </style>
+  </head>
+
+  <h1>Websocket handler test</h1>
+
+  <script>
+
+var ws = new WebSocket("ws://localhost:8080/events");
+
+function sendMessage() {
+  var msg = document.getElementById("input").value;
+  ws.send(msg);
+}
+
+ws.onopen = function() {
+};
+
+ws.onmessage = function(evt) {
+  var outputDiv = document.getElementById("output");
+  outputDiv.value = evt.data;
+};
+
+ws.onclose = function() {
+  alert("Connection closed!");
+};
+
+  </script>
+  <input type="text" id="input"/> <button onclick="sendMessage()">&gt;&gt;</button> <input type="text" id="output"/>
+</html>

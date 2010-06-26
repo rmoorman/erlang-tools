@@ -1,0 +1,4 @@
+*.log
+*.beam
+*.access
+samples/ws_echo/yaws.conf
