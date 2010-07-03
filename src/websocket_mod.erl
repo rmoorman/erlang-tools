@@ -1,12 +1,11 @@
 %%% File    : websocket_mod.erl
 %%% Author  : Dominique Boucher <>
-%%% Description : Websockets behaviour
-%%% Created :  9 Mar 2010 by Dominique Boucher <>
+%%% Description : Websockets module for Yaws and behaviour
 
 -module(websocket_mod).
 
 
--export([out/1, send_event/1, send_event/2]).
+-export([out/1, setup/2, send_event/1, send_event/2]).
 -export([behaviour_info/1]).
 
 
@@ -29,19 +28,23 @@ send_event(WsProcess, Event) ->
     WsProcess ! {ws_event, Event}.
 
 
-out(A) -> 
+out(A) ->
+    case get_handler(A) of
+	{module, HandlerModule} ->
+	    setup(A, HandlerModule);
+	_ ->
+	    {content, "text/plain", "Undefined websocket handler module"}
+    end.
+
+
+setup(A, HandlerModule) -> 
     case get_upgrade_header(A#arg.headers) of 
 	undefined ->
 	    error_logger:info_msg("Receive a request from a non-websocket client~n"),
 	    {content, "text/plain", "You're not a web sockets client! Go away!"};
 	"WebSocket" ->
-	    case get_handler(A) of
-		{module, HandlerModule} ->
-		    WebSocketOwner = spawn(fun() -> init_handler(HandlerModule, A) end),
-		    {websocket, WebSocketOwner, passive};
-		_ ->
-		    {content, "text/plain", "Undefined websocket handler module"}
-	    end
+	    WebSocketOwner = spawn(fun() -> init_handler(HandlerModule, A) end),
+	    {websocket, WebSocketOwner, passive}
     end.
 
 
