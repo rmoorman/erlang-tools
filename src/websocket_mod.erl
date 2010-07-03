@@ -9,7 +9,7 @@
 -export([behaviour_info/1]).
 
 
--include("/home/dboucher/lib/yaws/include/yaws_api.hrl").
+-include("yaws_api.hrl").
 
 
 -define(HANDLER_MODULE_PARAMETER, "websocket_handler").
