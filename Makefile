@@ -1,4 +1,4 @@
-YAWS_INCLUDE=/usr/local/lib/yaws/include
+YAWS_INCLUDE=/usr/local/lib/yaws/include # Replace with the location of yaws_api.hrl
 
 BEAM_DIR=ebin
 SRC_DIR=src
