@@ -5,7 +5,7 @@
 -module(websocket_mod).
 
 
--export([out/1, setup/2, send_event/1, send_event/2]).
+-export([out/1, setup/2, send_message/2]).
 -export([behaviour_info/1]).
 
 
@@ -13,19 +13,16 @@
 
 
 -define(HANDLER_MODULE_PARAMETER, "websocket_handler").
-
+-define(MSG_TAG,'$ws_msg').
 
 behaviour_info(callbacks) ->
-    [{init, 1}, {handle_data, 2}, {handle_event, 2}, {shutdown, 1}];
+    [{init, 1}, {handle_data, 2}, {handle_info, 2}, {shutdown, 1}];
 behaviour_info(_Other) ->
     undefined.
 
 
-send_event(Event) ->
-    send_event(self(), Event).
-
-send_event(WsProcess, Event) ->
-    WsProcess ! {ws_event, Event}.
+send_message(WsProcess, Event) ->
+    WsProcess ! {?MSG_TAG, Event}.
 
 
 out(A) ->
@@ -73,28 +70,38 @@ init_handler(HandlerModule, HttpArgs) ->
 event_loop(HandlerModule, WebSocket, State) ->
     receive
 	{tcp, WebSocket, DataFrame} ->
-	    Data = yaws_api:websocket_unframe_data(DataFrame),
-	    NewState = apply({HandlerModule, handle_data}, [Data, State]),
+	    Messages = yaws_websockets:unframe_all(DataFrame, []),
+	    NewState = 
+		lists:foldl(fun(Msg, CurrentState) ->
+				    apply({HandlerModule, handle_data}, [Msg, CurrentState])
+			    end, State, Messages),
             event_loop(HandlerModule, WebSocket, NewState);
 	{tcp_closed, WebSocket} ->
 	    apply({HandlerModule, shutdown}, [State]),
 	    bye;
-	{ws_event, Event} ->
-	    case apply({HandlerModule, handle_event}, [Event, State]) of
-		{json, JsonObject, NewState} ->
-		    Data = list_to_binary(json:encode(JsonObject)),
-		    yaws_api:websocket_send(WebSocket, Data),
-		    event_loop(HandlerModule, WebSocket, NewState);
-		{raw, Data, NewState} when is_binary(Data) ->
-		    yaws_api:websocket_send(WebSocket, Data),
-		    event_loop(HandlerModule, WebSocket, NewState);
-		ignore ->
-		    event_loop(HandlerModule, WebSocket, State);
-		Result ->
-		    error_logger:warning_msg("Unhandled result in websocket handler: ~p", [Result]),
-		    event_loop(HandlerModule, WebSocket, State)
-	    end
+	{?MSG_TAG, Event} ->
+	    process_message(Event, HandlerModule, handle_info, WebSocket, State);
+	Msg ->
+	    process_message(Msg, HandlerModule, handle_info, WebSocket, State)
     end.
+
+
+process_message(Message, HandlerModule, HandlerFunction, WebSocket, State) ->
+    case apply({HandlerModule, HandlerFunction}, [Message, State]) of
+	{json, JsonObject, NewState} ->
+	    Data = list_to_binary(json:encode(JsonObject)),	
+	    yaws_api:websocket_send(WebSocket, Data),
+	    event_loop(HandlerModule, WebSocket, NewState);
+	{raw, Data, NewState} when is_binary(Data) ->
+	    yaws_api:websocket_send(WebSocket, Data),
+	    event_loop(HandlerModule, WebSocket, NewState);
+	ignore ->
+	    event_loop(HandlerModule, WebSocket, State);
+	Result ->
+	    error_logger:warning_msg("Unhandled result in websocket handler: ~p", [Result]),
+	    event_loop(HandlerModule, WebSocket, State)
+    end.
+	    
 
 get_upgrade_header(#headers{other=L}) ->
     lists:foldl(fun({http_header,_,K0,_,V}, undefined) ->

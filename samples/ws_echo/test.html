@@ -32,18 +32,29 @@ function sendMessage() {
   ws.send(msg);
 }
 
+function showStatus(msg) {
+  var status = document.getElementById("status");
+  status.innerHTML = msg;
+  setTimeout(function() {
+    status.innerHTML = "";
+  }, 750);
+}
+
 ws.onopen = function() {
+  showStatus("Websocket opened.");
 };
 
 ws.onmessage = function(evt) {
   var outputDiv = document.getElementById("output");
   outputDiv.value = evt.data;
+  showStatus("Websocket received message.");
 };
 
 ws.onclose = function() {
-  alert("Connection closed!");
+  showStatus("Websocket closed.");
 };
 
   </script>
   <input type="text" id="input"/> <button onclick="sendMessage()">&gt;&gt;</button> <input type="text" id="output"/>
+  <div id="status"></div>
 </html>
