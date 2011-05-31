@@ -34,5 +34,5 @@ cat >> yaws.conf <<EOF
 EOF
 
 
-yaws -i --id ws_echo 
+yaws --conf yaws.conf -i --id ws_echo 
 
