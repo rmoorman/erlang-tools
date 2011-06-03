@@ -5,7 +5,7 @@
 -module(websocket_mod).
 
 
--export([out/1, setup/2, send_message/2]).
+-export([out/1, setup/2, cast/1, cast/2]).
 -export([behaviour_info/1]).
 
 
@@ -15,14 +15,18 @@
 -define(HANDLER_MODULE_PARAMETER, "websocket_handler").
 -define(MSG_TAG,'$ws_msg').
 
+
 behaviour_info(callbacks) ->
-    [{init, 1}, {handle_data, 2}, {handle_info, 2}, {shutdown, 1}];
+    [{init, 1}, {handle_data, 2}, {handle_info, 2}, {terminate, 1}];
 behaviour_info(_Other) ->
     undefined.
 
 
-send_message(WsProcess, Event) ->
+cast(WsProcess, Event) ->
     WsProcess ! {?MSG_TAG, Event}.
+
+cast(Event) ->
+    cast(self(), Event).
 
 
 out(A) ->
@@ -60,10 +64,10 @@ init_handler(HandlerModule, HttpArgs) ->
     receive
 	{ok, WebSocket} ->
 	    yaws_api:websocket_setopts(WebSocket, [{active, true}]),
-	    State = apply({HandlerModule, init}, [HttpArgs]),
+	    State = HandlerModule:init(HttpArgs),
 	    event_loop(HandlerModule, WebSocket, State);
 	_ -> 
-	    apply({HandlerModule, shutdown}, [[]]),
+            HandlerModule:terminate([]),
 	    ok
     end.
 
@@ -73,11 +77,11 @@ event_loop(HandlerModule, WebSocket, State) ->
 	    Messages = yaws_websockets:unframe_all(DataFrame, []),
 	    NewState = 
 		lists:foldl(fun(Msg, CurrentState) ->
-				    apply({HandlerModule, handle_data}, [Msg, CurrentState])
+                                    HandlerModule:handle_data(Msg, CurrentState)
 			    end, State, Messages),
             event_loop(HandlerModule, WebSocket, NewState);
 	{tcp_closed, WebSocket} ->
-	    apply({HandlerModule, shutdown}, [State]),
+            HandlerModule:terminate(State),
 	    bye;
 	{?MSG_TAG, Event} ->
 	    process_message(Event, HandlerModule, handle_info, WebSocket, State);
@@ -87,7 +91,7 @@ event_loop(HandlerModule, WebSocket, State) ->
 
 
 process_message(Message, HandlerModule, HandlerFunction, WebSocket, State) ->
-    case apply({HandlerModule, HandlerFunction}, [Message, State]) of
+    case HandlerModule:HandlerFunction(Message, State) of
 	{json, JsonObject, NewState} ->
 	    Data = list_to_binary(json:encode(JsonObject)),	
 	    yaws_api:websocket_send(WebSocket, Data),
