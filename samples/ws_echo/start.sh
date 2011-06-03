@@ -10,12 +10,7 @@ cat > yaws.conf <<EOF
 
 cache_refresh_secs = 0
 
-auth_log = true
 ebin_dir = ../../ebin
-
-# TODO: Make log_resolve_hostname true on Linux, false on Windows.
-# TODO: Report to the Yaws author the DNS wait, which should not happen.
-log_resolve_hostname = false
 
 <server localhost>
   port = 8080
